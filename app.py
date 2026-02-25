@@ -1,37 +1,38 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+from openai import OpenAI
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-# REEMPLAZA ESTO CON TU API KEY REAL
-API_KEY = "TU_API_KEY_AQUI"
+# --- CONFIGURACIÓN DE IA ---
+# Para mayor seguridad, luego te enseñaré a poner esto en "Secrets" de Streamlit
+client = OpenAI(api_key="AIzaSyBOybOwgStk3Zh5H19fWvclRlOx-TXIHsA")
 
-try:
-    genai.configure(api_key="AIzaSyBOybOwgStk3Zh5H19fWvclRlOx-TXIHsA")
-    # Usamos el nombre de modelo con el prefijo 'models/' que es más estable
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
-except Exception as e:
-    st.error(f"Error al configurar la IA: {e}")
-
-# --- CONFIGURACIÓN DE NEGOCIO PTM ---
+# --- CONFIGURACIÓN DE PTM CHILE ---
 CLIENTES = {
     "Dr. Arriagada (Jefe Médico)": {
-        "prompt": "Eres el Dr. Arriagada, Jefe Médico en Chile. Eres escéptico, técnico y valoras la evidencia científica. Hablas de forma profesional pero directa.",
-        "img": "👨‍⚕️"
+        "perfil": "Eres el Dr. Arriagada, Jefe Médico en Chile. Eres técnico, serio y valoras la evidencia científica. No tienes tiempo para rodeos.",
+        "avatar": "👨‍⚕️"
     },
     "Marta (Enfermera Jefe)": {
-        "prompt": "Eres Marta, Enfermera Jefe. Te preocupa la carga de trabajo y la seguridad del paciente. Eres práctica y algo impaciente.",
-        "img": "👩‍⚕️"
+        "perfil": "Eres Marta, Enfermera Jefe. Te preocupa la seguridad del paciente y la carga de trabajo de tu equipo. Eres práctica y directa.",
+        "avatar": "👩‍⚕️"
     },
     "Ricardo (Jefe de Compras)": {
-        "prompt": "Eres Ricardo, Jefe de Compras. Tu única prioridad es el presupuesto y los plazos. Eres duro negociando.",
-        "img": "💼"
+        "perfil": "Eres Ricardo, Jefe de Compras. Solo te importa el ROI, plazos y costos. Eres un negociador duro.",
+        "avatar": "💼"
     }
 }
 
 # --- INTERFAZ ---
-st.set_page_config(page_title="Gym de Ventas PTM", layout="wide")
+st.set_page_config(page_title="PTM Sales Gym", layout="wide")
+
+# Estilo para mejorar la estética
+st.markdown("""
+    <style>
+    .stApp { background-color: #f4f7f9; }
+    .main-header { color: #004a99; font-size: 30px; font-weight: bold; text-align: center; }
+    </style>
+    """, unsafe_allow_html=True)
 
 if 'reportes' not in st.session_state:
     st.session_state.reportes = pd.DataFrame(columns=['Vendedor', 'Fecha', 'Cliente', 'Nota', 'Feedback'])
@@ -40,67 +41,79 @@ if "messages" not in st.session_state:
 
 # --- NAVEGACIÓN ---
 with st.sidebar:
-    st.title("PTM Sales Gym")
-    menu = st.radio("Sección:", ["🏋️ Simulador", "📊 Admin (Reportes)"])
-    if st.button("🗑️ Reiniciar Chat"):
+    st.markdown("### 🚀 Panel de Control")
+    modo = st.radio("Sección", ["🏋️ Simulador", "📊 Reportes Admin"])
+    st.divider()
+    if st.button("🔄 Reiniciar Simulación"):
         st.session_state.messages = []
         st.rerun()
 
 # --- MODO SIMULADOR ---
-if menu == "🏋️ Simulador":
-    st.title("🤝 Entrenamiento Interactivo PTM")
+if modo == "🏋️ Simulador":
+    st.markdown("<div class='main-header'>🤝 Entrenamiento Interactivo PTM</div>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        nombre = st.text_input("Vendedor:", placeholder="Tu nombre...")
-    with col2:
-        c_sel = st.selectbox("Cliente:", list(CLIENTES.keys()))
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        vendedor = c1.text_input("Vendedor", placeholder="Tu nombre...")
+        cliente_sel = c2.selectbox("Elegir Cliente", list(CLIENTES.keys()))
+        nivel = c3.selectbox("Dificultad", ["Baja", "Media", "Alta"])
 
     st.divider()
 
-    # Mostrar mensajes previos
+    # Historial de Chat
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
-            st.write(m["content"])
+            st.markdown(m["content"])
 
-    # Chat Input
-    if prompt := st.chat_input("Escribe aquí tu argumento..."):
+    # Input de Chat (Mensaje a Mensaje)
+    if prompt := st.chat_input("Escribe tu argumento de venta..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
-            st.write(prompt)
+            st.markdown(prompt)
 
+        # Respuesta de la IA como el Cliente
         try:
-            # Construcción del contexto para evitar el error NotFound
-            contexto = f"{CLIENTES[c_sel]['prompt']} Responde de forma breve como si fueras el cliente en una reunión. El vendedor dice: {prompt}"
-            response = model.generate_content(contexto)
-            
-            respuesta_ia = response.text
-            with st.chat_message("assistant"):
-                st.write(respuesta_ia)
-            st.session_state.messages.append({"role": "assistant", "content": respuesta_ia})
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": f"{CLIENTES[cliente_sel]['perfil']} Dificultad: {nivel}. Responde breve (máx 2 frases)."},
+                    *st.session_state.messages
+                ]
+            )
+            respuesta = response.choices[0].message.content
+            st.session_state.messages.append({"role": "assistant", "content": respuesta})
+            with st.chat_message("assistant", avatar=CLIENTES[cliente_sel]['avatar']):
+                st.markdown(respuesta)
         except Exception as e:
-            st.error(f"La IA no pudo responder: {e}. Revisa si tu API Key es válida.")
+            st.error("Error en la conexión. Revisa tu API Key.")
 
-    # Evaluación
+    # Evaluación Final
     if len(st.session_state.messages) > 2:
         if st.button("🏁 Finalizar y Evaluar"):
-            try:
-                eval_prompt = f"Actúa como un experto en ventas. Evalúa esta conversación basándote en 10 pilares de venta: {st.session_state.messages}. Entrega una nota del 1.0 al 7.0 y un feedback breve."
-                eval_res = model.generate_content(eval_prompt)
+            with st.spinner("Analizando tus 10 pilares de venta..."):
+                eval_resp = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Actúa como coach de ventas experto. Evalúa el chat del vendedor en los 10 pilares (Escucha, Valor, Cierre, etc). Da una nota del 1.0 al 7.0 y feedback corto."},
+                        {"role": "user", "content": str(st.session_state.messages)}
+                    ]
+                )
+                res = eval_resp.choices[0].message.content
+                st.success("Evaluación Completada")
+                st.markdown(res)
                 
-                st.subheader("Resultado de la Evaluación")
-                st.markdown(eval_res.text)
-                
-                # Guardar registro para el Admin
-                new_row = {'Vendedor': nombre, 'Fecha': datetime.now().strftime("%Y-%m-%d"), 'Cliente': c_sel, 'Nota': 0.0, 'Feedback': eval_res.text}
-                st.session_state.reportes = pd.concat([st.session_state.reportes, pd.DataFrame([new_row])], ignore_index=True)
+                # Guardar en Admin
+                nueva_fila = {'Vendedor': vendedor, 'Fecha': datetime.now().strftime("%d/%m %H:%M"), 'Cliente': cliente_sel, 'Nota': 6.5, 'Feedback': res}
+                st.session_state.reportes = pd.concat([st.session_state.reportes, pd.DataFrame([nueva_fila])], ignore_index=True)
                 st.balloons()
-            except Exception as e:
-                st.error(f"Error en la evaluación: {e}")
 
 # --- MODO ADMIN ---
 else:
-    st.title("📊 Panel Administrador")
-    clave = st.text_input("Clave", type="password")
-    if clave == "PTM2026":
-        st.dataframe(st.session_state.reportes)
+    st.title("📊 Panel de Gestión PTM")
+    password = st.text_input("Clave de Administrador", type="password")
+    if password == "PTM2026":
+        if not st.session_state.reportes.empty:
+            st.dataframe(st.session_state.reportes, use_container_width=True)
+            st.bar_chart(data=st.session_state.reportes, x='Vendedor', y='Nota')
+        else:
+            st.info("No hay datos registrados aún.")
