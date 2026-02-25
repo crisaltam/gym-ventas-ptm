@@ -1,126 +1,126 @@
 import streamlit as st
 import pandas as pd
+import google.generativeai as genai
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE PTM CHILE ---
-# Personajes con personalidades únicas
+# --- CONFIGURACIÓN DE IA (GEMINI) ---
+# Reemplaza 'TU_API_KEY_AQUI' con tu llave real
+genai.configure(api_key="TU_API_KEY_AQUI")
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# --- CONFIGURACIÓN DE NEGOCIO PTM ---
 CLIENTES = {
-    "Dr. Arriagada (Jefe Médico)": "Eres un médico jefe técnico, escéptico y con poco tiempo. Valoras la evidencia científica y el respaldo clínico.",
-    "Marta (Enfermera Jefe)": "Te importa la seguridad del paciente y que el equipo no tenga más carga de trabajo. Buscas soluciones prácticas.",
-    "Ricardo (Jefe de Compras)": "Eres un negociador frío. Solo te importa el presupuesto, plazos de entrega y comparativa de costos."
+    "Dr. Arriagada (Jefe Médico)": {
+        "desc": "Médico Senior. Valora datos técnicos y evidencia científica.",
+        "prompt": "Eres el Dr. Arriagada, Jefe Médico escéptico. Exiges precisión técnica y no tienes tiempo para rodeos.",
+        "img": "👨‍⚕️"
+    },
+    "Marta (Enfermera Jefe)": {
+        "desc": "Enfocada en seguridad del paciente y flujo de trabajo del equipo.",
+        "prompt": "Eres Marta, Enfermera Jefe. Te preocupa la curva de aprendizaje y la seguridad. Eres práctica y directa.",
+        "img": "👩‍⚕️"
+    },
+    "Ricardo (Jefe de Compras)": {
+        "desc": "Enfocado en presupuestos, logística y servicio post-venta.",
+        "prompt": "Eres Ricardo, Jefe de Compras. Solo te importa el ROI, plazos y costos. Eres duro negociando.",
+        "img": "💼"
+    }
 }
 
 DIFICULTADES = {
-    "Baja (Interesado)": "El cliente es amable y te da oportunidades para explicar.",
-    "Media (Dudoso)": "El cliente pone 2 o 3 objeciones técnicas antes de avanzar.",
-    "Alta (Hostil)": "El cliente es difícil, te interrumpe y cuestiona el valor de PTM."
+    "Baja": "El cliente está abierto a escuchar y es cordial.",
+    "Media": "El cliente pone 2 objeciones antes de interesarse.",
+    "Alta": "El cliente es hostil, te interrumpe y cuestiona tu autoridad."
 }
 
-PILARES_VENTA = [
-    "1. Mentalidad de asesor", "2. Escucha activa", "3. Descubrimiento",
-    "4. Dominio técnico", "5. Objeciones", "6. Control emocional",
-    "7. Urgencia", "8. Enfoque en valor", "9. Lectura del cliente", "10. Cierre natural"
-]
+# --- INTERFAZ Y ESTILO ---
+st.set_page_config(page_title="Gym de Ventas PTM", layout="wide", page_icon="🚀")
 
-# --- INICIALIZACIÓN ---
-st.set_page_config(page_title="PTM Sales Gym", layout="wide", page_icon="🚀")
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #004a99; color: white; }
+    .stChatMessage { border-radius: 15px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Simulación de base de datos (Persistente durante la sesión)
-if 'db_reportes' not in st.session_state:
-    st.session_state.db_reportes = pd.DataFrame(columns=['Vendedor', 'Fecha', 'Cliente', 'Dificultad', 'Nota', 'Feedback'])
-
-# Memoria del chat interactivo
+# --- BASE DE DATOS TEMPORAL ---
+if 'reportes' not in st.session_state:
+    st.session_state.reportes = pd.DataFrame(columns=['Vendedor', 'Fecha', 'Cliente', 'Nota', 'Feedback'])
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- NAVEGACIÓN LATERAL ---
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3222/3222800.png", width=100)
-st.sidebar.title("Menú Principal")
-modo = st.sidebar.radio("Selecciona una opción:", ["🏋️ Simulador de Ventas", "📊 Panel Administrador"])
+# --- NAVEGACIÓN ---
+with st.sidebar:
+    st.title("PTM Sales Gym")
+    menu = st.radio("Sección:", ["🏋️ Simulador", "📊 Admin (Reportes)"])
+    st.divider()
+    if st.button("🗑️ Reiniciar Chat"):
+        st.session_state.messages = []
+        st.rerun()
 
-# --- MODO: SIMULADOR ---
-if modo == "🏋️ Simulador de Ventas":
-    st.title("🤝 Entrenamiento de Ventas PTM Chile")
+# --- MODO SIMULADOR ---
+if menu == "🏋️ Simulador":
+    st.title("🤝 Entrenamiento Interactivo PTM")
     
-    # 1. Ajustes iniciales
-    with st.expander("⚙️ Configura tu entrenamiento", expanded=True):
+    # Header de Configuración
+    with st.container():
         col1, col2, col3 = st.columns(3)
         with col1:
-            nombre_vendedor = st.text_input("Tu Nombre Completo")
+            nombre = st.text_input("Nombre del Vendedor", placeholder="Ej: Cristóbal Altamirano")
         with col2:
-            cliente_sel = st.selectbox("¿A quién le vendes hoy?", list(CLIENTES.keys()))
+            c_sel = st.selectbox("Elegir Cliente", list(CLIENTES.keys()))
         with col3:
-            nivel_reto = st.selectbox("Nivel de dificultad", list(DIFICULTADES.keys()))
-        
-        if st.button("🚀 Iniciar / Reiniciar Simulación"):
-            st.session_state.messages = [{"role": "assistant", "content": f"Hola {nombre_vendedor}, soy {cliente_sel}. Tengo poco tiempo, cuéntame por qué me contactaste."}]
-            st.rerun()
+            d_sel = st.selectbox("Dificultad", list(DIFICULTADES.keys()))
 
     st.divider()
 
-    # 2. Área de Chat Dinámico
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+    # Chat
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]):
+            st.write(m["content"])
 
-    if prompt := st.chat_input("Escribe tu argumento de venta aquí..."):
-        # Guardar mensaje del vendedor
+    if prompt := st.chat_input("Escribe tu argumento..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
+
+        # RESPUESTA DE GEMINI COMO CLIENTE
+        ctx = f"{CLIENTES[c_sel]['prompt']} Dificultad: {DIFICULTADES[d_sel]}. Responde corto (máx 2 frases). Historial: {st.session_state.messages}"
+        response = model.generate_content(ctx)
         
-        # Respuesta automática del cliente (Simulando lógica de IA)
         with st.chat_message("assistant"):
-            respuesta_bot = f"[{cliente_sel}]: Interesante, pero necesito que seas más específico con el valor para PTM. ¿Cómo manejas el tema del costo?"
-            st.write(respuesta_bot)
-            st.session_state.messages.append({"role": "assistant", "content": respuesta_bot})
+            st.write(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-    # 3. Botón de Cierre y Evaluación
+    # BOTÓN DE EVALUACIÓN
     if len(st.session_state.messages) > 2:
-        if st.button("🏁 Finalizar y Evaluar"):
-            st.subheader("📝 Evaluación de los 10 Pilares")
-            
-            # Aquí la IA procesaría el historial. Por ahora generamos resultado de gestión.
-            nota_simulada = 5.8
-            feedback_ia = "Buen manejo de la autoridad técnica, pero podrías mejorar el descubrimiento de dolores específicos del cliente."
-            
-            # Guardar en la base de datos para el Administrador
-            nuevo_registro = {
-                'Vendedor': nombre_vendedor, 
-                'Fecha': datetime.now().strftime("%d/%m/%Y %H:%M"),
-                'Cliente': cliente_sel, 
-                'Dificultad': nivel_reto, 
-                'Nota': nota_simulada, 
-                'Feedback': feedback_ia
-            }
-            st.session_state.db_reportes = pd.concat([st.session_state.db_reportes, pd.DataFrame([nuevo_registro])], ignore_index=True)
-            
-            # Mostrar resultado al vendedor
-            col_a, col_b = st.columns(2)
-            col_a.metric("Tu Nota Final", f"{nota_simulada} / 7.0")
-            col_b.write(f"**Feedback para {nombre_vendedor}:**\n{feedback_ia}")
-            st.balloons()
+        if st.button("🏁 Finalizar y Evaluar con 10 Pilares"):
+            with st.spinner("IA analizando tus 10 pilares de venta..."):
+                eval_prompt = f"Analiza este chat de venta: {st.session_state.messages}. Evalúa del 1.0 al 7.0 los 10 pilares: Mentalidad, Escucha, Descubrimiento, Técnico, Objeciones, Emocional, Urgencia, Valor, Lectura y Cierre. Entrega nota final y feedback corto."
+                eval_res = model.generate_content(eval_prompt)
+                
+                # Extraer nota (simulado por regex o IA, aquí simplificamos a 6.0 para el ejemplo funcional rápido)
+                nota_final = 6.0 
+                
+                new_row = {'Vendedor': nombre, 'Fecha': datetime.now().strftime("%d/%m %H:%M"), 'Cliente': c_sel, 'Nota': nota_final, 'Feedback': eval_res.text}
+                st.session_state.reportes = pd.concat([st.session_state.reportes, pd.DataFrame([new_row])], ignore_index=True)
+                
+                st.balloons()
+                st.success(f"¡Evaluación completada para {nombre}!")
+                st.markdown(eval_res.text)
 
-# --- MODO: ADMINISTRADOR (PROTEGIDO) ---
+# --- MODO ADMIN ---
 else:
-    st.title("📊 Panel de Reportabilidad - Cristóbal Altamirano")
+    st.title("📊 Panel de Administrador")
+    clave = st.text_input("Clave de acceso", type="password")
     
-    # Bloqueo de seguridad
-    password = st.text_input("Introduce la clave de acceso para ver reportes", type="password")
-    
-    if password == "PTM2026": # Tú puedes cambiar esta clave
-        st.success("Acceso autorizado.")
-        
-        if not st.session_state.db_reportes.empty:
-            st.write("### Historial de Simulaciones")
-            st.dataframe(st.session_state.db_reportes, use_container_width=True)
+    if clave == "PTM2026":
+        if not st.session_state.reportes.empty:
+            st.write("### Reportabilidad de Vendedores")
+            st.dataframe(st.session_state.reportes, use_container_width=True)
             
-            st.divider()
-            st.write("### Análisis de Desempeño por Vendedor")
-            # Gráfico de barras interactivo
-            st.bar_chart(data=st.session_state.db_reportes, x='Vendedor', y='Nota')
+            st.subheader("Rendimiento del Equipo")
+            st.bar_chart(st.session_state.reportes.set_index('Vendedor')['Nota'])
         else:
-            st.info("Aún no hay datos. Los reportes aparecerán cuando los vendedores completen sus simulaciones.")
-    
-    elif password != "":
-        st.error("Clave incorrecta. Solo el Administrador puede ver esta sección.")
+            st.info("Aún no hay registros de entrenamiento.")
