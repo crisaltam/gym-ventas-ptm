@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- CONFIGURACIÓN DE IA ---
 # Para mayor seguridad, luego te enseñaré a poner esto en "Secrets" de Streamlit
-client = OpenAI(api_key="AIzaSyBOybOwgStk3Zh5H19fWvclRlOx-TXIHsA")
+client = OpenAI(api_key="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")
 
 # --- CONFIGURACIÓN DE PTM CHILE ---
 CLIENTES = {
