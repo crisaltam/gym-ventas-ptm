@@ -3,18 +3,18 @@ import pandas as pd
 import google.generativeai as genai
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE IA (RUTA FORZADA) ---
+# --- CONFIGURACIÓN DE IA (MÁXIMA COMPATIBILIDAD) ---
 try:
-    # Usamos la ruta técnica completa para evitar el error NotFound
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    # Probamos con el nombre directo del modelo
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
-    st.error(f"🔑 Error de configuración en Secrets: {e}")
+    st.error(f"🔑 Error en Secrets: {e}")
     st.stop()
 
 # --- DATOS DE CLIENTES PTM CHILE ---
 CLIENTES = {
-    "Jefe de Equipo Médico": {"dif": "DIFÍCIL", "icon": "👨‍⚕️", "desc": "Exige evidencia clínica y resultados", "prompt": "Eres un Jefe de Equipo Médico técnico y directo."},
+    "Jefe de Equipo Médico": {"dif": "DIFÍCIL", "icon": "👨‍⚕️", "desc": "Exige evidencia clínica y resultados", "prompt": "Eres un Jefe de Equipo Médico técnico."},
     "Enfermera Jefa UCI": {"dif": "MEDIO", "icon": "👩‍⚕️", "desc": "Prioriza seguridad y facilidad de uso", "prompt": "Eres una Enfermera Jefa preocupada por su personal."},
     "Jefe de Compras": {"dif": "DIFÍCIL", "icon": "💼", "desc": "Precio, licitación y proveedores", "prompt": "Eres un Jefe de Compras enfocado en el ahorro."},
     "Jefe de Bodega": {"dif": "MEDIO", "icon": "📦", "desc": "Logística, espacio y mantenimiento", "prompt": "Eres un Jefe de Bodega preocupado por el orden."},
@@ -25,7 +25,7 @@ CLIENTES = {
 
 st.set_page_config(page_title="PTM Sales Gym", layout="centered")
 
-# Estilos CSS para las Tarjetas Profesionales
+# Estilos CSS
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 12px; border: 1px solid #ddd; background-color: white; color: black; height: 3em; }
@@ -34,7 +34,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Inicializar estados de la sesión
 if 'reportes' not in st.session_state:
     st.session_state.reportes = pd.DataFrame(columns=['Vendedor', 'Fecha', 'Cliente', 'Nota', 'Feedback'])
 if 'chat_iniciado' not in st.session_state:
@@ -66,17 +65,16 @@ if modo == "🏋️ Simulador":
                             st.session_state.cliente = nombre
                             st.session_state.chat_iniciado = True
                             
-                            # Generación de saludo inicial con manejo de errores
                             try:
-                                saludo = model.generate_content(f"{info['prompt']} Saluda al vendedor de forma breve.")
-                                st.session_state.messages = [{"role": "model", "parts": [saludo.text]}]
+                                # Respuesta simple sin historial para evitar el 404 de inicio
+                                response = model.generate_content(f"{info['prompt']} Saluda al vendedor de forma breve.")
+                                st.session_state.messages = [{"role": "model", "parts": [response.text]}]
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Error al iniciar chat: {e}")
+                                st.error(f"Error al iniciar: {e}")
                         else:
-                            st.warning("Por favor, ingresa tu nombre primero.")
+                            st.warning("Por favor, ingresa tu nombre.")
     else:
-        # PANTALLA DE CHAT INTERACTIVO
         st.header(f"Simulación: {st.session_state.cliente}")
         for m in st.session_state.messages:
             rol = "assistant" if m["role"] == "model" else "user"
@@ -86,9 +84,9 @@ if modo == "🏋️ Simulador":
         if p := st.chat_input("Escribe tu respuesta..."):
             st.session_state.messages.append({"role": "user", "parts": [p]})
             try:
-                # Usamos el historial acumulado para dar continuidad
-                chat_session = model.start_chat(history=st.session_state.messages[:-1])
-                response = chat_session.send_message(p)
+                # Usamos generate_content directo para máxima estabilidad
+                prompt_completo = f"Actúa como {st.session_state.cliente}. Historial: {str(st.session_state.messages)}. Responde brevemente."
+                response = model.generate_content(prompt_completo)
                 st.session_state.messages.append({"role": "model", "parts": [response.text]})
                 st.rerun()
             except Exception as e:
@@ -96,12 +94,12 @@ if modo == "🏋️ Simulador":
 
         if st.button("Finalizar y Evaluar"):
             try:
-                eval_p = f"Actúa como un experto. Evalúa este chat de venta médica según los 10 pilares de PTM Chile: {str(st.session_state.messages)}. Nota 1.0 a 7.0."
+                eval_p = f"Evalúa esta venta médica bajo los 10 pilares de éxito de PTM Chile: {str(st.session_state.messages)}. Nota 1.0 a 7.0."
                 res_eval = model.generate_content(eval_p)
-                st.success("Evaluación Generada")
+                st.success("Evaluación Completada")
                 st.markdown(res_eval.text)
                 
-                # Guardar en reporte de Administrador para tu gestión
+                # Guardar reporte para Cristóbal
                 fila = {'Vendedor': st.session_state.vendedor, 'Fecha': datetime.now().strftime("%d/%m %H:%M"), 'Cliente': st.session_state.cliente, 'Nota': 6.0, 'Feedback': res_eval.text}
                 st.session_state.reportes = pd.concat([st.session_state.reportes, pd.DataFrame([fila])], ignore_index=True)
                 st.balloons()
@@ -109,6 +107,6 @@ if modo == "🏋️ Simulador":
                 st.error(f"Error en evaluación: {e}")
 
 else:
-    st.title("📊 Panel Admin - PTM Chile")
-    if st.text_input("Clave de Acceso", type="password") == "PTM2026":
+    st.title("📊 Panel Admin")
+    if st.text_input("Clave", type="password") == "PTM2026":
         st.dataframe(st.session_state.reportes, use_container_width=True)
