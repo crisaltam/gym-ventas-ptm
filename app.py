@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- CONFIGURACIÓN DE IA (GEMINI) ---
 # Reemplaza 'TU_API_KEY_AQUI' con tu llave real
-genai.configure(api_key="TU_API_KEY_AQUI")
+genai.configure(api_key=AIzaSyBOybOwgStk3Zh5H19fWvclRlOx-TXIHsA)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- CONFIGURACIÓN DE NEGOCIO PTM ---
