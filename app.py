@@ -1,48 +1,35 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+import google.generativeai as genai
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE IA ---
+# --- SEGURIDAD: CONEXIÓN A GEMINI ---
 try:
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception:
-    st.error("🔑 Error: Configura 'OPENAI_API_KEY' en los Secrets de Streamlit.")
+    st.error("🔑 Error: Configura 'GEMINI_API_KEY' en los Secrets de Streamlit.")
     st.stop()
 
-# --- DATOS DE CLIENTES (Según tu imagen) ---
+# --- DATOS DE CLIENTES PTM ---
 CLIENTES = {
-    "Jefe de Equipo Médico": {"dif": "DIFÍCIL", "desc": "Exige evidencia clínica y resultados", "icon": "👨‍⚕️", "prompt": "Eres un Jefe de Equipo Médico muy técnico."},
-    "Enfermera Jefa UCI": {"dif": "MEDIO", "desc": "Prioriza seguridad y facilidad de uso", "icon": "👩‍⚕️", "prompt": "Eres una Enfermera Jefa preocupada por su equipo."},
-    "Jefe de Compras": {"dif": "DIFÍCIL", "desc": "Precio, licitación y proveedores", "icon": "💼", "prompt": "Eres un Jefe de Compras enfocado en costos."},
-    "Jefe de Bodega": {"dif": "MEDIO", "desc": "Logística, espacio y mantenimiento", "icon": "📦", "prompt": "Eres un Jefe de Bodega preocupado por el espacio."},
-    "Jefe de Adquisiciones": {"dif": "DIFÍCIL", "desc": "Procesos, contratos y normativa", "icon": "📋", "prompt": "Eres un Jefe de Adquisiciones muy estricto."},
-    "Dr. Jefe de Pabellón": {"dif": "DIFÍCIL", "desc": "Exigente, el equipo debe ser perfecto", "icon": "🏥", "prompt": "Eres un Cirujano Jefe que no acepta errores."},
-    "Enfermera Jefa de Calidad": {"dif": "MEDIO", "desc": "Protocolos, acreditación y normativas", "icon": "✅", "prompt": "Eres una jefa enfocada en normativas ISO/Acreditación."}
+    "Jefe de Equipo Médico": {"dif": "DIFÍCIL", "icon": "👨‍⚕️", "desc": "Exige evidencia clínica y resultados", "prompt": "Eres un Jefe de Equipo Médico en Chile, muy técnico y escéptico."},
+    "Enfermera Jefa UCI": {"dif": "MEDIO", "icon": "👩‍⚕️", "desc": "Prioriza seguridad y facilidad de uso", "prompt": "Eres una Enfermera Jefa preocupada por la carga de trabajo de su equipo."},
+    "Jefe de Compras": {"dif": "DIFÍCIL", "icon": "💼", "desc": "Precio, licitación y proveedores", "prompt": "Eres un Jefe de Compras que solo busca ahorrar presupuesto."},
+    "Jefe de Bodega": {"dif": "MEDIO", "icon": "📦", "desc": "Logística, espacio y mantenimiento", "prompt": "Eres un Jefe de Bodega preocupado por el stock y el espacio."},
+    "Jefe de Adquisiciones": {"dif": "DIFÍCIL", "icon": "📋", "desc": "Procesos, contratos y normativa", "prompt": "Eres un Jefe de Adquisiciones muy estricto con los papeles."},
+    "Dr. Jefe de Pabellón": {"dif": "DIFÍCIL", "icon": "🏥", "desc": "Exigente, el equipo debe ser perfecto", "prompt": "Eres un Cirujano Jefe que no tiene tiempo para rodeos."},
+    "Enfermera Jefa de Calidad": {"dif": "MEDIO", "icon": "✅", "desc": "Protocolos, acreditación y normativas", "prompt": "Eres una jefa enfocada en normativas y acreditación de salud."}
 }
 
 st.set_page_config(page_title="PTM Sales Gym", layout="centered")
 
-# --- ESTILOS CSS PARA LAS TARJETAS ---
+# Estilos CSS
 st.markdown("""
     <style>
-    .cliente-card {
-        border: 1px solid #ddd;
-        border-radius: 15px;
-        padding: 20px;
-        text-align: center;
-        background-color: white;
-        height: 220px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-    }
-    .dif-tag {
-        font-size: 10px;
-        font-weight: bold;
-        color: #ff4b4b;
-        text-align: right;
-        margin-bottom: 5px;
-    }
-    .dif-tag-medio { color: #ffa500; }
+    .stButton>button { width: 100%; border-radius: 10px; border: 1px solid #ddd; background-color: white; color: black; }
+    .dif-tag { font-size: 10px; font-weight: bold; color: #ff4b4b; text-align: right; }
+    .dif-tag-medio { color: #ffa500; font-size: 10px; font-weight: bold; text-align: right; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -53,71 +40,55 @@ if 'chat_iniciado' not in st.session_state:
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 
-# --- LÓGICA DE NAVEGACIÓN ---
-modo = st.sidebar.radio("Ir a:", ["Simulador", "Admin"])
+# --- NAVEGACIÓN ---
+modo = st.sidebar.radio("Menú", ["Simulador", "Admin"])
 
 if modo == "Simulador":
     if not st.session_state.chat_iniciado:
         st.write("### TU NOMBRE")
-        nombre_vendedor = st.text_input("ej. Carlos Rodríguez", key="v_name")
+        nombre_v = st.text_input("ej. Cristóbal Altamirano")
         
         st.write("### TU CLIENTE ASIGNADO")
-        
-        # Crear la cuadrícula de tarjetas
         cols = st.columns(2)
         for i, (nombre, info) in enumerate(CLIENTES.items()):
             with cols[i % 2]:
                 with st.container(border=True):
-                    color_clase = "dif-tag" if info['dif'] == "DIFÍCIL" else "dif-tag-medio"
-                    st.markdown(f"<div class='{color_clase}'>{info['dif']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<h1 style='text-align: center; font-size: 40px;'>{info['icon']}</h1>", unsafe_allow_html=True)
+                    tag = "dif-tag" if info['dif'] == "DIFÍCIL" else "dif-tag-medio"
+                    st.markdown(f"<div class='{tag}'>{info['dif']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<h1 style='text-align: center;'>{info['icon']}</h1>", unsafe_allow_html=True)
                     st.markdown(f"<h4 style='text-align: center;'>{nombre}</h4>", unsafe_allow_html=True)
-                    st.markdown(f"<p style='text-align: center; font-size: 12px; color: gray;'>{info['desc']}</p>", unsafe_allow_html=True)
-                    if st.button(f"Seleccionar {nombre}", key=f"btn_{nombre}"):
-                        if nombre_vendedor:
-                            st.session_state.vendedor = nombre_vendedor
-                            st.session_state.cliente_actual = nombre
+                    if st.button(f"Seleccionar", key=nombre):
+                        if nombre_v:
                             st.session_state.chat_iniciado = True
-                            st.session_state.messages = [{"role": "assistant", "content": f"Hola, soy el {nombre}. Cuéntame, ¿qué me traes hoy?"}]
+                            st.session_state.vendedor = nombre_v
+                            st.session_state.cliente = nombre
+                            st.session_state.messages = [{"role": "model", "parts": [f"Hola, soy el {nombre}. Cuéntame qué me traes hoy."]}]
                             st.rerun()
-                        else:
-                            st.warning("Por favor, ingresa tu nombre primero.")
-
+                        else: st.warning("Escribe tu nombre.")
     else:
-        # PANTALLA DE CHAT
-        st.header(f"Hablando con: {st.session_state.cliente_actual}")
-        
+        st.header(f"Cliente: {st.session_state.cliente}")
         for m in st.session_state.messages:
-            with st.chat_message(m["role"]):
-                st.markdown(m["content"])
+            role = "assistant" if m["role"] == "model" else "user"
+            with st.chat_message(role): st.markdown(m["parts"][0])
 
         if prompt := st.chat_input("Escribe tu respuesta..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": CLIENTES[st.session_state.cliente_actual]['prompt']}, *st.session_state.messages]
-            )
-            res_text = response.choices[0].message.content
-            st.session_state.messages.append({"role": "assistant", "content": res_text})
+            st.session_state.messages.append({"role": "user", "parts": [prompt]})
+            chat = model.start_chat(history=st.session_state.messages[:-1])
+            response = chat.send_message(prompt)
+            st.session_state.messages.append({"role": "model", "parts": [response.text]})
             st.rerun()
 
         if st.button("Finalizar y Evaluar"):
-            # Lógica de evaluación basada en tus 10 pilares
-            eval_p = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": "Evalúa esta venta médica del 1.0 al 7.0 según los 10 pilares de PTM Chile."}, {"role": "user", "content": str(st.session_state.messages)}]
-            )
-            st.success("Evaluación recibida")
-            st.markdown(eval_p.choices[0].message.content)
+            eval_prompt = f"Evalúa esta venta médica según los 10 pilares de PTM Chile (Mentalidad, Escucha, Valor, etc). Da nota 1 a 7: {str(st.session_state.messages)}"
+            res = model.generate_content(eval_prompt)
+            st.success("Evaluación Completada")
+            st.markdown(res.text)
             
-            # Guardar en Admin
-            nueva_fila = {'Vendedor': st.session_state.vendedor, 'Fecha': datetime.now().strftime("%d/%m %H:%M"), 'Cliente': st.session_state.cliente_actual, 'Nota': 6.0, 'Feedback': eval_p.choices[0].message.content}
+            # Guardar en reporte
+            nueva_fila = {'Vendedor': st.session_state.vendedor, 'Fecha': datetime.now().strftime("%d/%m %H:%M"), 'Cliente': st.session_state.cliente, 'Nota': 6.0, 'Feedback': res.text}
             st.session_state.reportes = pd.concat([st.session_state.reportes, pd.DataFrame([nueva_fila])], ignore_index=True)
-            
-            if st.button("Nueva Simulación"):
+            st.balloons()
+            if st.button("Nueva Práctica"):
                 st.session_state.chat_iniciado = False
                 st.rerun()
 
@@ -125,4 +96,4 @@ else:
     st.title("📊 Panel Admin")
     clave = st.text_input("Clave", type="password")
     if clave == "PTM2026":
-        st.dataframe(st.session_state.reportes, use_container_width=True)
+        st.dataframe(st.session_state.reportes)
